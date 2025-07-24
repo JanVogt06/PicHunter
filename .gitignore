@@ -12,3 +12,8 @@ downloaded_images/
 
 # Log Files
 *.log
+
+# PyInstaller
+build/
+dist/
+*.spec
