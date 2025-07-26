@@ -51,12 +51,22 @@ jobs:
       run: |
         pyinstaller --onefile --name PicHunter image_downloader.py
 
+    # Rename the built file to include platform identifier
+    - name: Rename executable
+      run: |
+        if [ "${{ matrix.os }}" == "windows-latest" ]; then
+          mv dist/PicHunter.exe dist/${{ matrix.asset_name }}
+        else
+          mv dist/PicHunter dist/${{ matrix.asset_name }}
+        fi
+      shell: bash
+
     # Build-Artefakte hochladen
     - name: Upload artifacts
       uses: actions/upload-artifact@v4
       with:
         name: ${{ matrix.asset_name }}
-        path: dist/${{ matrix.artifact_name }}
+        path: dist/${{ matrix.asset_name }}
 
   # Release erstellen und Artefakte anhängen
   release:
@@ -71,14 +81,21 @@ jobs:
       with:
         path: ./artifacts
 
+    # Debug: List downloaded files
+    - name: List downloaded files
+      run: |
+        echo "Downloaded artifacts:"
+        ls -la ./artifacts/
+        ls -la ./artifacts/*/
+
     # Release erstellen und Dateien anhängen
     - name: Create Release
       uses: softprops/action-gh-release@v1
       with:
         files: |
-          ./artifacts/PicHunter-windows-x64.exe/PicHunter.exe
-          ./artifacts/PicHunter-macos-x64/PicHunter
-          ./artifacts/PicHunter-linux-x64/PicHunter
+          ./artifacts/PicHunter-windows-x64.exe/PicHunter-windows-x64.exe
+          ./artifacts/PicHunter-macos-x64/PicHunter-macos-x64
+          ./artifacts/PicHunter-linux-x64/PicHunter-linux-x64
         body: |
           ## 🚀 Automated Release
           
