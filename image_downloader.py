@@ -34,17 +34,26 @@ class ImageDownloader:
         self.setup_logging()
 
     def setup_logging(self):
-        """Logging-Konfiguration"""
+        """Logging-Konfiguration - nur in Datei, nicht auf Konsole"""
         log_file = f"image_download_{datetime.now().strftime('%Y%m%d_%H%M%S')}.log"
-        logging.basicConfig(
-            level=logging.INFO,
-            format='%(asctime)s - %(levelname)s - %(message)s',
-            handlers=[
-                logging.FileHandler(log_file),
-                logging.StreamHandler(sys.stdout)
-            ]
-        )
-        self.logger = logging.getLogger(__name__)
+
+        # Erstelle einen separaten Logger
+        self.logger = logging.getLogger('ImageDownloader')
+        self.logger.setLevel(logging.INFO)
+
+        # Nur File Handler, kein Console Handler
+        file_handler = logging.FileHandler(log_file, encoding='utf-8')
+        file_handler.setLevel(logging.INFO)
+
+        formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
+        file_handler.setFormatter(formatter)
+
+        # Entferne alle existierenden Handler
+        self.logger.handlers = []
+        self.logger.addHandler(file_handler)
+
+        # Verhindere Propagierung zu root logger
+        self.logger.propagate = False
 
     def create_output_directory(self):
         """Erstellt den Ausgabeordner mit Unterordner für die Domain"""
@@ -60,7 +69,9 @@ class ImageDownloader:
             response.raise_for_status()
             return response.content
         except requests.RequestException as e:
-            self.logger.error(f"Fehler beim Abrufen der Seite: {e}")
+            error_msg = f"Fehler beim Abrufen der Seite: {e}"
+            print(f"❌ {error_msg}")
+            self.logger.error(error_msg)
             sys.exit(1)
 
     def extract_image_urls(self, soup):
@@ -190,6 +201,8 @@ class ImageDownloader:
 
     def download_all_images(self, image_urls):
         """Lädt alle Bilder parallel herunter"""
+        # Info vor Progress Bar ausgeben
+        print(f"\n📥 Starte Download von {len(image_urls)} Bildern...\n")
         self.logger.info(f"Starte Download von {len(image_urls)} Bildern...")
 
         results = []
@@ -201,12 +214,15 @@ class ImageDownloader:
             }
 
             # Progress Bar
-            with tqdm(total=len(image_urls), desc="Downloading") as pbar:
+            with tqdm(total=len(image_urls), desc="Downloading", ncols=100) as pbar:
                 for future in as_completed(future_to_url):
                     result = future.result()
                     results.append(result)
-                    self.logger.info(result)
+                    self.logger.info(result)  # Nur in Log-Datei
                     pbar.update(1)
+
+        # Nach Progress Bar eine Leerzeile
+        print()
 
         return results
 
@@ -216,36 +232,48 @@ class ImageDownloader:
         duplicates = sum(1 for r in results if "Duplikat" in r)
         failed = sum(1 for r in results if "Fehler" in r)
 
-        report = f"""
-        ========== Download Abgeschlossen ==========
-        Erfolgreich heruntergeladen: {successful}
-        Duplikate übersprungen: {duplicates}
-        Fehlgeschlagen: {failed}
-        Gesamt verarbeitet: {len(results)}
-        Ausgabeordner: {self.output_path}
-        ==========================================
-        """
+        # Report erstellen
+        report_lines = [
+            "========== Download Abgeschlossen ==========",
+            f"✅ Erfolgreich heruntergeladen: {successful}",
+            f"🔄 Duplikate übersprungen: {duplicates}",
+            f"❌ Fehlgeschlagen: {failed}",
+            f"📊 Gesamt verarbeitet: {len(results)}",
+            f"📁 Ausgabeordner: {self.output_path}",
+            "==========================================="
+        ]
 
-        self.logger.info(report)
+        # Direkt Zeile für Zeile ausgeben
+        for line in report_lines:
+            print(line)
+
+        # Auch in Log schreiben
+        report_text = "\n".join(report_lines)
+        self.logger.info(report_text)
 
         # Speichere detaillierten Bericht
         report_file = os.path.join(self.output_path, 'download_report.txt')
         with open(report_file, 'w', encoding='utf-8') as f:
             f.write(f"Download Report - {datetime.now()}\n")
             f.write(f"URL: {self.url}\n")
-            f.write(report)
-            f.write("\nDetaillierte Ergebnisse:\n")
+            f.write(report_text)
+            f.write("\n\nDetaillierte Ergebnisse:\n")
             for result in results:
                 f.write(f"{result}\n")
 
+        print(f"\n📄 Detaillierter Bericht gespeichert: {report_file}")
+
     def run(self):
         """Hauptmethode - führt den kompletten Download-Prozess aus"""
+        # Ausgaben direkt mit print() für bessere Sichtbarkeit
+        print(f"\n🌐 Starte Image Downloader für: {self.url}")
         self.logger.info(f"Starte Image Downloader für: {self.url}")
 
         # Erstelle Ausgabeordner
         self.create_output_directory()
 
         # Lade Seiteninhalt
+        print("📄 Lade Webseite...")
         self.logger.info("Lade Webseite...")
         content = self.get_page_content()
 
@@ -253,13 +281,16 @@ class ImageDownloader:
         soup = BeautifulSoup(content, 'html.parser')
 
         # Extrahiere Bild-URLs
+        print("🔍 Extrahiere Bild-URLs...")
         self.logger.info("Extrahiere Bild-URLs...")
         image_urls = self.extract_image_urls(soup)
 
         if not image_urls:
+            print("\n❌ Keine Bilder auf der Seite gefunden!")
             self.logger.warning("Keine Bilder auf der Seite gefunden!")
             return
 
+        print(f"✅ {len(image_urls)} Bilder gefunden")
         self.logger.info(f"{len(image_urls)} Bilder gefunden")
 
         # Lade Bilder herunter
@@ -301,10 +332,10 @@ Beispiele:
     try:
         downloader.run()
     except KeyboardInterrupt:
-        print("\n\nDownload durch Benutzer abgebrochen!")
+        print("\n\n⚠️  Download durch Benutzer abgebrochen!")
         sys.exit(0)
     except Exception as e:
-        print(f"\nFehler: {e}")
+        print(f"\n❌ Fehler: {e}")
         sys.exit(1)
 
 
