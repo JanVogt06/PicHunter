@@ -1,0 +1,95 @@
+name: Build and Release
+
+# Workflow wird ausgelöst wenn ein Tag gepusht wird, der mit 'v' beginnt
+on:
+  push:
+    tags:
+      - 'v*'  # z.B. v1.0.0, v1.0.1, etc.
+
+jobs:
+  build:
+    name: Build on ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+
+    strategy:
+      matrix:
+        include:
+          - os: windows-latest
+            artifact_name: PicHunter.exe
+            asset_name: PicHunter-windows-x64.exe
+          - os: macos-latest
+            artifact_name: PicHunter
+            asset_name: PicHunter-macos-x64
+          - os: ubuntu-latest
+            artifact_name: PicHunter
+            asset_name: PicHunter-linux-x64
+
+    steps:
+    # Repository auschecken
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    # Python installieren
+    - name: Set up Python 3.10
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.10'
+
+    # Dependencies installieren
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+        pip install pyinstaller
+
+    # Executable bauen
+    - name: Build with PyInstaller
+      run: |
+        pyinstaller --onefile --name PicHunter image_downloader.py
+
+    # Build-Artefakte hochladen
+    - name: Upload artifacts
+      uses: actions/upload-artifact@v3
+      with:
+        name: ${{ matrix.asset_name }}
+        path: dist/${{ matrix.artifact_name }}
+
+  # Release erstellen und Artefakte anhängen
+  release:
+    name: Create Release
+    needs: build  # Wartet bis alle Builds fertig sind
+    runs-on: ubuntu-latest
+
+    steps:
+    # Alle Build-Artefakte herunterladen
+    - name: Download all artifacts
+      uses: actions/download-artifact@v3
+      with:
+        path: ./artifacts
+
+    # Release erstellen und Dateien anhängen
+    - name: Create Release
+      uses: softprops/action-gh-release@v1
+      with:
+        files: |
+          ./artifacts/PicHunter-windows-x64.exe/PicHunter.exe
+          ./artifacts/PicHunter-macos-x64/PicHunter
+          ./artifacts/PicHunter-linux-x64/PicHunter
+        body: |
+          ## 🚀 Automated Release
+          
+          This release was automatically built and published by GitHub Actions.
+          
+          ### 📦 Downloads
+          - **Windows:** `PicHunter-windows-x64.exe`
+          - **macOS:** `PicHunter-macos-x64`
+          - **Linux:** `PicHunter-linux-x64`
+          
+          ### 📋 Installation
+          1. Download the appropriate file for your system
+          2. Make it executable (macOS/Linux): `chmod +x PicHunter-*`
+          3. Run it: `./PicHunter-* https://example.com`
+        draft: false
+        prerelease: false
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
