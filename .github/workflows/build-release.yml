@@ -6,6 +6,10 @@ on:
     tags:
       - 'v*'  # z.B. v1.0.0, v1.0.1, etc.
 
+# Permissions für den Workflow
+permissions:
+  contents: write  # Erlaubt das Erstellen von Releases
+
 jobs:
   build:
     name: Build on ${{ matrix.os }}
